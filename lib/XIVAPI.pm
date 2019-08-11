@@ -7,6 +7,9 @@ use strict;
 use version;
 our $VERSION = qv('0.0.3');
 
+our $AUTOLOAD;
+our $HOSTNAME = 'https://xivapi.com';
+
 use LWP;
 
 use Toolkit;
@@ -25,6 +28,32 @@ sub new {
     $self->{'_json'} = JSON->new->allow_nonref();
 
     return bless( $self, $class );
+}
+
+sub AUTOLOAD{
+  my ($self, $id, $cacheName) = @_;
+  return if( $AUTOLOAD eq 'XIVAPI::DESTROY');
+
+  my ($name) = $AUTOLOAD =~ /::(.+)$/;
+  $name = lc($name);
+  my %check = map{lc($_) => undef} @{$self->content()};
+  printObject(\%check);
+  if( !exists($check{$name}) ){
+    die("Cannot locate object method '$name' via package ".__PACKAGE__);
+  }
+
+  return $self->getApiData("$HOSTNAME/$name/$id" => "$name$id");
+}
+
+sub content{
+  my ($self) = @_;
+
+  if( !exists($self->{'indexes'}) ){
+     my $obj = $self->getApiData("$HOSTNAME/content" => 'content');
+     $self->{'indexes'} = $obj;
+  }
+
+  return $self->{'indexes'};
 }
 
 sub search {
@@ -76,7 +105,6 @@ sub _search {
   }
 }/;
 
-    quick($esQuery);
     my $req = HTTP::Request->new( POST => 'https://xivapi.com/search' );
     $req->content($esQuery);
 
