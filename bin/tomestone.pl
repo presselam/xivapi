@@ -42,8 +42,7 @@ sub main {
         'SMN' => { stats => ['Intelligence'], shops => [ 1769972, 1769975 ] },
     );
 
-    my $obj = $xivapi->getApiData(
-        'abacab' => 'https://xivapi.com/character/10001355?extended=1' );
+    my $obj = $xivapi->getApiData('https://xivapi.com/character/10001355?extended=1' => 'abacab' );
     message(
         "Current Class: '$obj->{'Character'}{'ActiveClassJob'}{'Job'}{'Name'}'"
     );
@@ -51,8 +50,7 @@ sub main {
     my $gear = $obj->{'Character'}{'GearSet'}{'Gear'};
 
     foreach my $shop ( @{ $config{$job}{'shops'} } ) {
-        $obj = $xivapi->getApiData( "specialshop$shop",
-            "https://xivapi.com/specialshop/$shop" );
+        $obj = $xivapi->getApiData( "https://xivapi.com/specialshop/$shop" => "specialshop$shop" );
 
         my %shop;
         my %slotMap;
@@ -77,8 +75,7 @@ sub main {
                     $shop{$internalId}{'ItemSlot'}
                         = $obj->{$key}{'EquipSlotCategoryTargetID'};
                     my $item
-                        = $xivapi->getApiData( "item$itemId",
-                        "https://xivapi.com/item/$itemId" );
+                        = $xivapi->getApiData("https://xivapi.com/item/$itemId" => "item$itemId" );
                     $shop{$internalId}{'ItemStats'} = $item->{'Stats'};
 
                     if( $item->{'ClassJobCategory'}{$job} == 1 ) {
@@ -99,7 +96,7 @@ sub main {
             my @row = ( $key, $itemId, $itemRef->{'Name'} );
 
             my $item
-                = $xivapi->getApiData( "item$itemId", "https://xivapi.com/item/$itemId" );
+                = $xivapi->getApiData( "https://xivapi.com/item/$itemId" => "item$itemId"  );
             my $slot = $item->{'EquipSlotCategoryTargetID'};
 
             next unless exists( $slotMap{$slot} );

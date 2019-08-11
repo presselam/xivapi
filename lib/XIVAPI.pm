@@ -9,48 +9,117 @@ our $VERSION = qv('0.0.3');
 
 use LWP;
 
+use Toolkit;
+
 sub new {
     my ($class) = shift;
     my $self = {@_};
 
-    my %known = map{ $_ => undef } qw( cache cacheDir );
-    for my $key (keys %{$self}){
-      die(__PACKAGE__ . ": unknown parameter: [$key]") unless( exists($known{$key}) );
+    my %known = map { $_ => undef } qw( cache cacheDir );
+    for my $key ( keys %{$self} ) {
+        die( __PACKAGE__ . ": unknown parameter: [$key]" )
+            unless( exists( $known{$key} ) );
     }
+
+    $self->{'_ua'} = LWP::UserAgent->new( agent => 'presselam' );
+    $self->{'_json'} = JSON->new->allow_nonref();
 
     return bless( $self, $class );
 }
 
-sub getApiData {
-  my ($self, $name, $url, $nocache ) = @_;
+sub search {
+    my ( $self, $index, $query, $cacheName ) = @_;
 
-  my $json = JSON->new->allow_nonref();
-  my $obj  = undef;
-  if ( !$nocache && $self->{'cache'} && -f "$self->{'cacheDir'}/$name.json" ) {
-    open( my $fh, '<', "$self->{'cacheDir'}/$name.json" );
-    local $/ = undef;
-    $obj = $json->decode(<$fh>);
-    close($fh);
-  } else {
-    my $ua   = LWP::UserAgent->new(agent => 'presselam');
+    $cacheName = undef unless( $self->{'cache'} );
 
-    my $req  = HTTP::Request->new( GET => $url );
-    my $resp = $ua->request($req);
-    if ( $resp->is_success() ) {
-      $obj = $json->decode( $resp->decoded_content() );
-      open( my $fh, '>', "$self->{'cacheDir'}/$name.json" );
-      $fh->print( $resp->decoded_content() );
-      close($fh);
+    my $retval = undef;
+    if( defined($cacheName) && -f "$self->{'cacheDir'}/$cacheName.json" ) {
+        open( my $fh, '<', "$self->{'cacheDir'}/$cacheName.json" );
+        local $/ = undef;
+        $retval = $self->{'_json'}->decode(<$fh>);
+        close($fh);
     } else {
-      quick( error => $resp->status_line() );
+        $retval = $self->_search( $index, $query );
+        open( my $fh, '>', "$self->{'cacheDir'}/$cacheName.json" );
+        $fh->print( $self->{'_json'}->encode($retval) );
+        close($fh);
     }
-  }
-
-  return $obj;
+    return $retval;
 }
 
+sub _search {
+    my ( $self, $index, $query ) = @_;
 
-1; # Magic true value required at end of module
+    my @terms;
+    foreach my $field ( keys %{$query} ) {
+        foreach my $item ( @{ $query->{$field} } ) {
+            push( @terms, qq/{"wildcard":{"$field":"$item"}}/ );
+        }
+    }
+
+    my $esQuery = qq/{
+  "indexes": "recipe",
+  "columns": "ID,Name,Icon",
+  "body": {
+    "query": {
+      "bool": {
+        "should": [
+/;
+    $esQuery .= join( ",\n", @terms );
+
+    $esQuery .= qq/
+        ]
+      }
+    },
+    "from": 0,
+    "size": 100
+  }
+}/;
+
+    quick($esQuery);
+    my $req = HTTP::Request->new( POST => 'https://xivapi.com/search' );
+    $req->content($esQuery);
+
+    my $retval = {};
+    my $resp   = $self->{_ua}->request($req);
+    if( $resp->is_success() ) {
+        $retval = $self->{'_json'}->decode( $resp->decoded_content() );
+    } else {
+        quick( error => $resp->status_line() );
+    }
+    return $retval;
+}
+
+sub getApiData {
+    my ( $self, $url, $cacheName ) = @_;
+
+    $cacheName = undef unless( $self->{'cache'} );
+
+    my $obj = undef;
+    if( defined($cacheName) && -f "$self->{'cacheDir'}/$cacheName.json" ) {
+        open( my $fh, '<', "$self->{'cacheDir'}/$cacheName.json" );
+        local $/ = undef;
+        $obj = $self->{'_json'}->decode(<$fh>);
+        close($fh);
+    } else {
+        my $req = HTTP::Request->new( GET => $url );
+        my $resp = $self->{_ua}->request($req);
+        if( $resp->is_success() ) {
+            $obj = $self->{'_json'}->decode( $resp->decoded_content() );
+            if( defined($cacheName) ){
+            open( my $fh, '>', "$self->{'cacheDir'}/$cacheName.json" );
+            $fh->print( $resp->decoded_content() );
+            close($fh);
+            }
+        } else {
+            quick( error => $resp->status_line() );
+        }
+    }
+
+    return $obj;
+}
+
+1;    # Magic true value required at end of module
 
 __END__
 
