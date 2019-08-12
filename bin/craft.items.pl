@@ -9,6 +9,7 @@ use File::Basename;
 use Getopt::Long;
 use JSON;
 use LWP;
+use POSIX qw( ceil );
 
 use Toolkit;
 
@@ -29,20 +30,86 @@ if( !GetOptions( \%opts, 'cache!', 'item=s@' ) ) {
     die("Invalid incantation\n");
 }
 
+    my $xivapi = XIVAPI->new( cacheDir => $ENV{'CACHE_DIR'},
+        cache => $opts{'cache'} );
+
 main();
 exit(0);
 
 sub main {
 
-  printObject(\%opts);
-  my @items = sort keys %{{map{ lc($_) => undef} @{$opts{'item'}}}};
+    my @items = sort keys %{ { map { lc($_) => undef } @{ $opts{'item'} } } };
 
-  my $xivapi = XIVAPI->new(cacheDir => $ENV{'CACHE_DIR'}, cache => $opts{'cache'});
-  my $obj = $xivapi->search('recipe' => {NameCombined_en => \@items} => 'search1');
-  printObject($obj->{'Results'});
+    my $obj = $xivapi->search(
+        'recipe' => { NameCombined_en => \@items } => 'search1' );
 
+    my %lookup;
+    foreach my $result ( @{ $obj->{'Results'} } ) {
+        $lookup{ $result->{'Name'} } = $result;
+    }
+
+    my %materials;
+    foreach my $item ( sort @{ $opts{'item'} } ) {
+        if( exists( $lookup{$item} ) ) {
+          my $obj = $xivapi->recipe($lookup{$item}{'ID'});
+          my $recipe = getRecipe($obj);
+          my $class = $recipe->{'class'};
+         $materials{$class} = {} unless( exists($materials{$class}) );
+         compileMaterials(\%materials, $recipe, 1);
+        } else {
+            warn( "[", red('WARNING'), "]: Unable to find recipe for [$item]" );
+        }
+    }
+
+    printObject( \%materials );
 }
-  
+
+sub compileMaterials{
+  my ($report, $recipe, $need) = @_;
+
+  my $name = $recipe->{'name'};
+  my $class = $recipe->{'class'};
+  $report->{$class}{$name} = $need;
+
+  foreach my $mat (@{$recipe->{'mats'}}){
+    if( ref($mat->[0]) ){
+      my ($ref, $req) = @{$mat};
+      my $class = $ref->{'class'};
+      my $yield = $ref->{'yield'};
+      compileMaterials($report, $ref, ceil(($need*$req)/$yield));
+    }else{
+    $report->{'gather'}{$mat->[0]} += $mat->[1] * $need;
+    }
+  }
+}
+
+sub getRecipe{
+  my ($obj) = @_;
+
+  my $retval = {
+    name => $obj->{'Name_en'},
+    class => $obj->{'ClassJob'}{'NameEnglish'},
+    yield => $obj->{'AmountResult'},
+    lvl => $obj->{'RecipeLevelTable'}{'ClassJobLevel'},
+  };
+
+  foreach my $key (keys %{$obj}){
+    my ($id) = $key =~ /^ItemIngredient(\d+)$/;
+    if( defined($id) && defined($obj->{"ItemIngredient$id"}) ){
+      my $matCount = $obj->{"AmountIngredient$id"};
+      my $category = $obj->{"ItemIngredient$id"}{'ItemSearchCategory'}{'Name'};
+      my $material = $obj->{"ItemIngredient$id"}{'Name'} . ":$category";
+      if( defined($obj->{"ItemIngredientRecipe$id"}) ){
+        my $mId = $obj->{"ItemIngredientRecipe$id"}[0]{'ID'}; 
+        my $tmp = $xivapi->recipe($mId);
+        $material = getRecipe($tmp);
+      }
+      push(@{$retval->{'mats'}}, [ $material, $matCount]);
+    }
+  }
+
+  return $retval;
+}
 
 __END__
 

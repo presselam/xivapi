@@ -37,7 +37,6 @@ sub AUTOLOAD{
   my ($name) = $AUTOLOAD =~ /::(.+)$/;
   $name = lc($name);
   my %check = map{lc($_) => undef} @{$self->content()};
-  printObject(\%check);
   if( !exists($check{$name}) ){
     die("Cannot locate object method '$name' via package ".__PACKAGE__);
   }
