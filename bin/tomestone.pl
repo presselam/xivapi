@@ -42,7 +42,7 @@ sub main {
         'SMN' => { stats => ['Intelligence'], shops => [ 1769972, 1769975 ] },
     );
 
-    my $obj = $xivapi->getApiData('https://xivapi.com/character/10001355?extended=1' => 'abacab' );
+    my $obj = $xivapi->getApiData('https://xivapi.com/character/10001355?extended=1');
     message(
         "Current Class: '$obj->{'Character'}{'ActiveClassJob'}{'Job'}{'Name'}'"
     );
@@ -136,12 +136,16 @@ sub main {
             $a->[5] <=> $b->[5];
         } @table;
 
+        my $need = 0;
         foreach my $row (@table) {
             if( $row->[5] <= 0 ) {
                 $_ = green($_) foreach @{$row};
+            }else{
+              $need++;
             }
         }
 
+        if( $need > 0 ){
         dump_table(
             table => [
                 [   qw( slot name id ), @{ $config{$job}{stats} }, 'delta',
@@ -150,6 +154,8 @@ sub main {
                 @table
             ]
         );
+        say( "$need items to purchaces");
+        }
     }
 
 }
