@@ -40,6 +40,10 @@ sub main {
         'RDM' => { stats => ['Intelligence'], shops => [ 1769972, 1769975 ] },
         'BLM' => { stats => ['Intelligence'], shops => [ 1769972, 1769975 ] },
         'SMN' => { stats => ['Intelligence'], shops => [ 1769972, 1769975 ] },
+        'DNC' => { stats => ['Dexterity'], shops => [1769971,1769974 ] },
+        'MCH' => { stats => ['Dexterity'], shops => [1769971,1769974 ] },
+        'BRD' => { stats => ['Dexterity'], shops => [1769971,1769974 ] },
+        'MIN' => { stats => ['Gathering'], shops => [1769991 ] },
     );
 
     my $obj = $xivapi->getApiData('https://xivapi.com/character/10001355?extended=1');
@@ -137,11 +141,13 @@ sub main {
         } @table;
 
         my $need = 0;
+        my $cost = 0;
         foreach my $row (@table) {
             if( $row->[5] <= 0 ) {
                 $_ = green($_) foreach @{$row};
             }else{
               $need++;
+              $cost += $row->[7];
             }
         }
 
@@ -154,7 +160,8 @@ sub main {
                 @table
             ]
         );
-        say( "$need items to purchaces");
+        say( "$need items to purchace");
+        say( "$cost total tomestones");
         }
     }
 
