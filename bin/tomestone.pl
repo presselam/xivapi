@@ -34,19 +34,26 @@ exit(0);
 
 sub main {
 
-  my $xivapi = XIVAPI->new(cacheDir => $ENV{'CACHE_DIR'}, cache => $opts{'cache'});
+    my $xivapi = XIVAPI->new( cacheDir => $ENV{'CACHE_DIR'},
+        cache => $opts{'cache'} );
 
     my %config = (
         'RDM' => { stats => ['Intelligence'], shops => [ 1769972, 1769975 ] },
         'BLM' => { stats => ['Intelligence'], shops => [ 1769972, 1769975 ] },
         'SMN' => { stats => ['Intelligence'], shops => [ 1769972, 1769975 ] },
-        'DNC' => { stats => ['Dexterity'], shops => [1769971,1769974 ] },
-        'MCH' => { stats => ['Dexterity'], shops => [1769971,1769974 ] },
-        'BRD' => { stats => ['Dexterity'], shops => [1769971,1769974 ] },
-        'MIN' => { stats => ['Gathering'], shops => [1769991 ] },
+        'DNC' => { stats => ['Dexterity'],    shops => [ 1769971, 1769974 ] },
+        'MCH' => { stats => ['Dexterity'],    shops => [ 1769971, 1769974 ] },
+        'NIN' => { stats => ['Dexterity'],    shops => [ 1769971, 1769974 ] },
+        'BRD' => { stats => ['Dexterity'],    shops => [ 1769971, 1769974 ] },
+        'MIN' => { stats => ['Gathering'], shops => [1769991] },
+        'LTW' =>
+            { stats => [ 'Craftsmanship', 'Control' ], shops => [1769990] },
+        'GSM' =>
+            { stats => [ 'Craftsmanship', 'Control' ], shops => [1769990] },
     );
 
-    my $obj = $xivapi->getApiData('https://xivapi.com/character/10001355?extended=1');
+    my $obj = $xivapi->getApiData(
+        'https://xivapi.com/character/10001355?extended=1' );
     message(
         "Current Class: '$obj->{'Character'}{'ActiveClassJob'}{'Job'}{'Name'}'"
     );
@@ -54,7 +61,8 @@ sub main {
     my $gear = $obj->{'Character'}{'GearSet'}{'Gear'};
 
     foreach my $shop ( @{ $config{$job}{'shops'} } ) {
-        $obj = $xivapi->getApiData( "https://xivapi.com/specialshop/$shop" => "specialshop$shop" );
+        $obj = $xivapi->getApiData(
+            "https://xivapi.com/specialshop/$shop" => "specialshop$shop" );
 
         my %shop;
         my %slotMap;
@@ -79,7 +87,8 @@ sub main {
                     $shop{$internalId}{'ItemSlot'}
                         = $obj->{$key}{'EquipSlotCategoryTargetID'};
                     my $item
-                        = $xivapi->getApiData("https://xivapi.com/item/$itemId" => "item$itemId" );
+                        = $xivapi->getApiData(
+                        "https://xivapi.com/item/$itemId" => "item$itemId" );
                     $shop{$internalId}{'ItemStats'} = $item->{'Stats'};
 
                     if( $item->{'ClassJobCategory'}{$job} == 1 ) {
@@ -96,38 +105,45 @@ sub main {
             my $itemRef = $gear->{$key}{'Item'};
             my $itemId  = $itemRef->{'ID'};
             my $rarity  = $itemRef->{'Rarity'};
+#            printObject($itemRef);
 
             my @row = ( $key, $itemId, $itemRef->{'Name'} );
 
             my $item
-                = $xivapi->getApiData( "https://xivapi.com/item/$itemId" => "item$itemId"  );
+                = $xivapi->getApiData(
+                "https://xivapi.com/item/$itemId" => "item$itemId" );
             my $slot = $item->{'EquipSlotCategoryTargetID'};
 
             next unless exists( $slotMap{$slot} );
 
-            my $piece = $shop{ $slotMap{$slot} };
+            my $piece    = $shop{ $slotMap{$slot} };
+            my $useValue = undef;
+            my $useStat  = undef;
             foreach my $stat ( @{ $config{$job}{stats} } ) {
-                my $value = 0;
-                if( $rarity == 1 ) {
-                    $value = $item->{'Stats'}{$stat}{'HQ'};
-                } else {
-                    $value = $item->{'Stats'}{$stat}{'NQ'};
+                if( !defined($useValue) ) {
+                    $useStat = $stat;
+                    if( $rarity == 1 ) {
+                        $useValue = $item->{'Stats'}{$stat}{'HQ'};
+                    } else {
+                        $useValue = $item->{'Stats'}{$stat}{'NQ'};
+                    }
                 }
 
-                my $target = $piece->{'ItemStats'}{$stat}{'NQ'};
-                my $delta  = $target - $value;
-                my $rate
-                    = $delta != 0
-                    ? sprintf( '%.02f', $piece->{'CountCost'} / $delta )
-                    : 0;
+            }
+            my $target = $piece->{'ItemStats'}{$useStat}{'NQ'};
+            my $delta  = $target - $useValue;
+            my $rate
+                = $delta != 0
+                ? sprintf( '%.02f', $piece->{'CountCost'} / $delta )
+                : 0;
 
-                push( @row, $value, $delta, $rate );
-            }
+            push( @row, $useValue, $delta, $rate );
+
             push( @row, $piece->{'ItemReceive'}, $piece->{'CountCost'} );
-            foreach my $stat ( @{ $config{$job}{stats} } ) {
-                my $value = $piece->{'ItemStats'}{$stat}{'NQ'};
+#            foreach my $stat ( @{ $config{$job}{stats} } ) {
+                my $value = $piece->{'ItemStats'}{$useStat}{'NQ'};
                 push( @row, $value );
-            }
+#            }
 
             push( @table, \@row );
         }
@@ -145,23 +161,21 @@ sub main {
         foreach my $row (@table) {
             if( $row->[5] <= 0 ) {
                 $_ = green($_) foreach @{$row};
-            }else{
-              $need++;
-              $cost += $row->[7];
+            } else {
+                $need++;
+                $cost += $row->[7];
             }
         }
 
-        if( $need > 0 ){
-        dump_table(
-            table => [
-                [   qw( slot name id ), @{ $config{$job}{stats} }, 'delta',
-                    'rate', 'item', 'cost', 'value'
-                ],
-                @table
-            ]
-        );
-        say( "$need items to purchace");
-        say( "$cost total tomestones");
+        if( $need > 0 ) {
+            dump_table(
+                table => [
+                    [   qw( slot id name current delta rate item cost value ) ],
+                    @table
+                ]
+            );
+            say("$need items to purchace");
+            say("$cost total tomestones");
         }
     }
 
