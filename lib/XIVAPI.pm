@@ -10,6 +10,7 @@ our $VERSION = qv('0.0.3');
 our $AUTOLOAD;
 
 use LWP;
+use JSON;
 use URL::Encode qw( url_encode );
 
 use Toolkit;
