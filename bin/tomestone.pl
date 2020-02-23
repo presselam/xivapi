@@ -68,13 +68,13 @@ my %config = (
     },
 
     'PLD' =>
-        { stats => ['Dexterity'], shops => [ 1769971, 1769974, 1770051 ] },
+        { stats => ['Tenacity'], shops => [ 1769971, 1769974, 1770051 ] },
     'WAR' =>
-        { stats => ['Dexterity'], shops => [ 1769971, 1769974, 1770051 ] },
+        { stats => ['Tenacity'], shops => [ 1769971, 1769974, 1770051 ] },
     'DRK' =>
-        { stats => ['Dexterity'], shops => [ 1769971, 1769974, 1770051 ] },
+        { stats => ['Tenacity'], shops => [ 1769971, 1769974, 1770051 ] },
     'GNB' =>
-        { stats => ['Dexterity'], shops => [ 1769971, 1769974, 1770051 ] },
+        { stats => ['Tenacity'], shops => [ 1769971, 1769974, 1770051 ] },
 
     'MIN' => { stats => ['Gathering'], shops => [1769991] },
     'LTW' => { stats => [ 'Craftsmanship', 'Control' ], shops => [1769990] },
@@ -220,9 +220,25 @@ sub main {
 
 sub getCharacterSheet {
     my ( $api, $config ) = @_;
-    my $obj = $api->character( $opts{'lodestone'} );
 
-    return $obj;
+    my $retval = undef;
+    my $job    = uc( $opts{'job'} );
+    if($job) {
+        $retval = $api->cached("character.$opts{'lodestone'}.$job");
+        if($retval) {
+            message("Using last known $job gearset");
+        } else {
+            message("Unknown gearset for $job");
+            exit(0);
+        }
+    } else {
+        my $current = $api->character( $opts{'lodestone'} );
+        $job = $current->{'Character'}{'ActiveClassJob'}{'Job'}
+            {'Abbreviation'};
+        $retval = $api->character(
+            $opts{'lodestone'} => "character.$opts{'lodestone'}.$job" );
+    }
+    return $retval;
 }
 
 __END__
