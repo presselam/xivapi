@@ -24,35 +24,86 @@ BEGIN {
 use lib $ENV{'LIB_DIR'};
 use XIVAPI;
 
-my %opts = ( 'cache' => 1 );
-if( !GetOptions( \%opts, 'cache!', 'commit' ) ) {
+my %opts = (
+    'lodestone' => 10001355,
+    'cache'     => 1
+);
+if( !GetOptions(
+        \%opts, 'job=s', 'lodestone=i', 'cache!', 'commit', 'verbose'
+    )
+    ) {
     die("Invalid incantation\n");
 }
+
+my %config = (
+    'RDM' =>
+        { stats => ['Intelligence'], shops => [ 1769972, 1769975, 1770052 ] },
+    'BLM' =>
+        { stats => ['Intelligence'], shops => [ 1769972, 1769975, 1770052 ] },
+    'SMN' =>
+        { stats => ['Intelligence'], shops => [ 1769972, 1769975, 1770052 ] },
+
+    'BRD' =>
+        { stats => ['Dexterity'], shops => [ 1769971, 1769974, 1770051 ] },
+    'MCH' =>
+        { stats => ['Dexterity'], shops => [ 1769971, 1769974, 1770051 ] },
+    'DNC' =>
+        { stats => ['Dexterity'], shops => [ 1769971, 1769974, 1770051 ] },
+
+    'MNK' => {
+        stats => [ 'Strength', 'Critical Hit' ],
+        shops => [ 1769971,    1769974, 1770051 ]
+    },
+    'DRG' => {
+        stats => [ 'Strength', 'Critical Hit' ],
+        shops => [ 1769971,    1769974, 1770051 ]
+    },
+    'NIN' => {
+        stats => [ 'Dexterity', 'Critical Hit' ],
+        shops => [ 1769971,     1769974, 1770051 ]
+    },
+    'SAM' => {
+        stats => [ 'Strength', 'Critical Hit' ],
+        shops => [ 1769971,    1769974, 1770051 ]
+    },
+
+    'PLD' =>
+        { stats => ['Tenacity'], shops => [ 1769971, 1769974, 1770051 ] },
+    'WAR' =>
+        { stats => ['Tenacity'], shops => [ 1769971, 1769974, 1770051 ] },
+    'DRK' =>
+        { stats => ['Tenacity'], shops => [ 1769971, 1769974, 1770051 ] },
+    'GNB' =>
+        { stats => ['Tenacity'], shops => [ 1769971, 1769974, 1770051 ] },
+
+    'MIN' => { stats => ['Gathering'], shops => [1769991] },
+    'LTW' => { stats => [ 'Craftsmanship', 'Control' ], shops => [1769990] },
+    'GSM' => { stats => [ 'Craftsmanship', 'Control' ], shops => [1769990] },
+);
 
 main();
 exit(0);
 
 sub main {
 
-  my $xivapi = XIVAPI->new(cacheDir => $ENV{'CACHE_DIR'}, cache => $opts{'cache'});
-
-    my %config = (
-        'RDM' => { stats => ['Intelligence'], shops => [ 1769972, 1769975 ] },
-        'BLM' => { stats => ['Intelligence'], shops => [ 1769972, 1769975 ] },
-        'SMN' => { stats => ['Intelligence'], shops => [ 1769972, 1769975 ] },
+    my $xivapi = XIVAPI->new(
+        host     => 'https://xivapi.com',
+        cacheDir => $ENV{'CACHE_DIR'},
+        cache    => $opts{'cache'},
+        verbose  => $opts{'verbose'},
     );
 
-    my $obj = $xivapi->getApiData(
-        'abacab' => 'https://xivapi.com/character/10001355?extended=1' );
+    my $obj = getCharacterSheet( $xivapi, \%config );
+
     message(
         "Current Class: '$obj->{'Character'}{'ActiveClassJob'}{'Job'}{'Name'}'"
     );
+
     my $job  = $obj->{'Character'}{'ActiveClassJob'}{'Job'}{'Abbreviation'};
     my $gear = $obj->{'Character'}{'GearSet'}{'Gear'};
 
     foreach my $shop ( @{ $config{$job}{'shops'} } ) {
-        $obj = $xivapi->getApiData( "specialshop$shop",
-            "https://xivapi.com/specialshop/$shop" );
+        $obj = $xivapi->specialshop($shop);
 
         my %shop;
         my %slotMap;
@@ -76,9 +127,7 @@ sub main {
                     $shop{$internalId}{'ItemId'} = $itemId;
                     $shop{$internalId}{'ItemSlot'}
                         = $obj->{$key}{'EquipSlotCategoryTargetID'};
-                    my $item
-                        = $xivapi->getApiData( "item$itemId",
-                        "https://xivapi.com/item/$itemId" );
+                    my $item = $xivapi->item($itemId);
                     $shop{$internalId}{'ItemStats'} = $item->{'Stats'};
 
                     if( $item->{'ClassJobCategory'}{$job} == 1 ) {
@@ -95,38 +144,43 @@ sub main {
             my $itemRef = $gear->{$key}{'Item'};
             my $itemId  = $itemRef->{'ID'};
             my $rarity  = $itemRef->{'Rarity'};
+            #            printObject($itemRef);
 
             my @row = ( $key, $itemId, $itemRef->{'Name'} );
 
-            my $item
-                = $xivapi->getApiData( "item$itemId", "https://xivapi.com/item/$itemId" );
+            my $item = $xivapi->item($itemId);
             my $slot = $item->{'EquipSlotCategoryTargetID'};
 
             next unless exists( $slotMap{$slot} );
 
-            my $piece = $shop{ $slotMap{$slot} };
+            my $piece    = $shop{ $slotMap{$slot} };
+            my $useValue = undef;
+            my $useStat  = undef;
             foreach my $stat ( @{ $config{$job}{stats} } ) {
-                my $value = 0;
-                if( $rarity == 1 ) {
-                    $value = $item->{'Stats'}{$stat}{'HQ'};
-                } else {
-                    $value = $item->{'Stats'}{$stat}{'NQ'};
+                if( !defined($useValue) ) {
+                    $useStat = $stat;
+                    if( $rarity == 1 ) {
+                        $useValue = $item->{'Stats'}{$stat}{'HQ'};
+                    } else {
+                        $useValue = $item->{'Stats'}{$stat}{'NQ'};
+                    }
                 }
 
-                my $target = $piece->{'ItemStats'}{$stat}{'NQ'};
-                my $delta  = $target - $value;
-                my $rate
-                    = $delta != 0
-                    ? sprintf( '%.02f', $piece->{'CountCost'} / $delta )
-                    : 0;
+            }
+            my $target = $piece->{'ItemStats'}{$useStat}{'NQ'};
+            my $delta  = $target - $useValue;
+            my $rate
+                = $delta != 0
+                ? sprintf( '%.02f', $piece->{'CountCost'} / $delta )
+                : 0;
 
-                push( @row, $value, $delta, $rate );
-            }
+            push( @row, $useValue, $delta, $rate );
+
             push( @row, $piece->{'ItemReceive'}, $piece->{'CountCost'} );
-            foreach my $stat ( @{ $config{$job}{stats} } ) {
-                my $value = $piece->{'ItemStats'}{$stat}{'NQ'};
-                push( @row, $value );
-            }
+            #            foreach my $stat ( @{ $config{$job}{stats} } ) {
+            my $value = $piece->{'ItemStats'}{$useStat}{'NQ'};
+            push( @row, $value );
+            #            }
 
             push( @table, \@row );
         }
@@ -139,22 +193,52 @@ sub main {
             $a->[5] <=> $b->[5];
         } @table;
 
+        my $need = 0;
+        my $cost = 0;
         foreach my $row (@table) {
             if( $row->[5] <= 0 ) {
                 $_ = green($_) foreach @{$row};
+            } else {
+                $need++;
+                $cost += $row->[7];
             }
         }
 
-        dump_table(
-            table => [
-                [   qw( slot name id ), @{ $config{$job}{stats} }, 'delta',
-                    'rate', 'item', 'cost', 'value'
-                ],
-                @table
-            ]
-        );
+        if( $need > 0 ) {
+            dump_table(
+                table => [
+                    [qw( slot id name current delta rate item cost value )],
+                    @table
+                ]
+            );
+            say("$need items to purchace");
+            say("$cost total tomestones");
+        }
     }
 
+}
+
+sub getCharacterSheet {
+    my ( $api, $config ) = @_;
+
+    my $retval = undef;
+    my $job    = uc( $opts{'job'} );
+    if($job) {
+        $retval = $api->cached("character.$opts{'lodestone'}.$job");
+        if($retval) {
+            message("Using last known $job gearset");
+        } else {
+            message("Unknown gearset for $job");
+            exit(0);
+        }
+    } else {
+        my $current = $api->character( $opts{'lodestone'} );
+        $job = $current->{'Character'}{'ActiveClassJob'}{'Job'}
+            {'Abbreviation'};
+        $retval = $api->character(
+            $opts{'lodestone'} => "character.$opts{'lodestone'}.$job" );
+    }
+    return $retval;
 }
 
 __END__
