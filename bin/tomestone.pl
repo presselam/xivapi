@@ -222,7 +222,8 @@ sub getCharacterSheet {
     my ( $api, $config ) = @_;
 
     my $retval = undef;
-    my $job    = uc( $opts{'job'} );
+    my $job    = $opts{'job'};
+    $job = uc($job) if( $job );
     if($job) {
         $retval = $api->cached("character.$opts{'lodestone'}.$job");
         if($retval) {
