@@ -8,9 +8,9 @@ use version;
 our $VERSION = qv('0.0.3');
 
 our $AUTOLOAD;
-our $HOSTNAME = 'https://xivapi.com';
 
 use LWP;
+use URL::Encode qw( url_encode );
 
 use Toolkit;
 
@@ -18,7 +18,7 @@ sub new {
     my ($class) = shift;
     my $self = {@_};
 
-    my %known = map { $_ => undef } qw( cache cacheDir );
+    my %known = map { $_ => undef } qw( host cache cacheDir );
     for my $key ( keys %{$self} ) {
         die( __PACKAGE__ . ": unknown parameter: [$key]" )
             unless( exists( $known{$key} ) );
@@ -41,21 +41,24 @@ sub AUTOLOAD{
     die("Cannot locate object method '$name' via package ".__PACKAGE__);
   }
 
-  return $self->getApiData("$HOSTNAME/$name/$id" => "$name$id");
+  my $endpoint = $name;
+  $endpoint .= "/$id" if( defined($id) );
+
+  return $self->_getApiData($endpoint => "$name.$id");
 }
 
 sub content{
   my ($self) = @_;
 
   if( !exists($self->{'indexes'}) ){
-     my $obj = $self->getApiData("$HOSTNAME/content" => 'content');
+     my $obj = $self->getApiData("$self->{'host'}/content" => 'content');
      $self->{'indexes'} = $obj;
   }
 
   return $self->{'indexes'};
 }
 
-sub search {
+sub query {
     my ( $self, $index, $query, $cacheName ) = @_;
 
     $cacheName = undef unless( $self->{'cache'} );
@@ -67,7 +70,7 @@ sub search {
         $retval = $self->{'_json'}->decode(<$fh>);
         close($fh);
     } else {
-        $retval = $self->_search( $index, $query );
+        $retval = $self->_query( $index, $query );
         open( my $fh, '>', "$self->{'cacheDir'}/$cacheName.json" );
         $fh->print( $self->{'_json'}->encode($retval) );
         close($fh);
@@ -75,7 +78,7 @@ sub search {
     return $retval;
 }
 
-sub _search {
+sub _query {
     my ( $self, $index, $query ) = @_;
 
     my @terms;
@@ -104,7 +107,7 @@ sub _search {
   }
 }/;
 
-    my $req = HTTP::Request->new( POST => 'https://xivapi.com/search' );
+    my $req = HTTP::Request->new( POST => "$self->{'host'}/search" );
     $req->content($esQuery);
 
     my $retval = {};
@@ -144,6 +147,56 @@ sub getApiData {
     }
 
     return $obj;
+}
+
+sub _getApiData {
+    my ( $self, $endpoint, $cacheName ) = @_;
+
+    $cacheName = undef unless( $self->{'cache'} );
+
+    my $obj = undef;
+    if( defined($cacheName) && -f "$self->{'cacheDir'}/$cacheName.json" ) {
+        open( my $fh, '<', "$self->{'cacheDir'}/$cacheName.json" );
+        local $/ = undef;
+        $obj = $self->{'_json'}->decode(<$fh>);
+        close($fh);
+    } else {
+    quick("$self->{'host'}/$endpoint");
+        my $req = HTTP::Request->new( GET => "$self->{'host'}/$endpoint" );
+        my $resp = $self->{_ua}->request($req);
+        if( $resp->is_success() ) {
+            $obj = $self->{'_json'}->decode( $resp->decoded_content() );
+            if( defined($cacheName) ){
+            open( my $fh, '>', "$self->{'cacheDir'}/$cacheName.json" );
+            $fh->print( $resp->decoded_content() );
+            close($fh);
+            }
+        } else {
+            quick( error => $resp->status_line() );
+        }
+    }
+
+    return $obj;
+}
+
+sub search{
+  my ($self, $filters, $cacheName) = @_;
+
+    $cacheName = undef unless( $self->{'cache'} );
+
+  my $filter = join(',', (map{ url_encode($_) } @{$filters}));
+  $filter =~ s/\+//g;
+
+  my @retval;
+  my $nextPage = 1;
+  while( defined($nextPage) ){
+  my $obj = $self->_getApiData("search?filters=$filter&page=$nextPage");
+  printObject($obj);
+    push(@retval, @{$obj->{'Results'}});
+    $nextPage=$obj->{'Pagination'}{'PageNext'};
+  }
+
+  return wantarray ? @retval : \@retval;
 }
 
 1;    # Magic true value required at end of module

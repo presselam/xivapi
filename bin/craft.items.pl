@@ -40,8 +40,8 @@ sub main {
 
     my @items = sort keys %{ { map { lc($_) => undef } @{ $opts{'item'} } } };
 
-    my $obj = $xivapi->search(
-        'recipe' => { NameCombined_en => \@items } => 'search1' );
+    my $obj = $xivapi->query(
+        'recipe' => { NameCombined_en => \@items } );
 
     my %lookup;
     foreach my $result ( @{ $obj->{'Results'} } ) {
