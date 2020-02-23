@@ -7,50 +7,211 @@ use strict;
 use version;
 our $VERSION = qv('0.0.3');
 
+our $AUTOLOAD;
+
 use LWP;
+use URL::Encode qw( url_encode );
+
+use Toolkit;
 
 sub new {
     my ($class) = shift;
     my $self = {@_};
 
-    my %known = map{ $_ => undef } qw( cache cacheDir );
-    for my $key (keys %{$self}){
-      die(__PACKAGE__ . ": unknown parameter: [$key]") unless( exists($known{$key}) );
+    my %known = map { $_ => undef } qw( host cache cacheDir verbose );
+    for my $key ( keys %{$self} ) {
+        die( __PACKAGE__ . ": unknown parameter: [$key]" )
+            unless( exists( $known{$key} ) );
     }
+
+    $self->{'_ua'} = LWP::UserAgent->new( agent => 'presselam' );
+    $self->{'_json'} = JSON->new->allow_nonref();
 
     return bless( $self, $class );
 }
 
-sub getApiData {
-  my ($self, $name, $url, $nocache ) = @_;
+sub AUTOLOAD{
+  my ($self, $id, $cacheName) = @_;
+  return if( $AUTOLOAD eq 'XIVAPI::DESTROY');
 
-  my $json = JSON->new->allow_nonref();
-  my $obj  = undef;
-  if ( !$nocache && $self->{'cache'} && -f "$self->{'cacheDir'}/$name.json" ) {
-    open( my $fh, '<', "$self->{'cacheDir'}/$name.json" );
-    local $/ = undef;
-    $obj = $json->decode(<$fh>);
-    close($fh);
-  } else {
-    my $ua   = LWP::UserAgent->new(agent => 'presselam');
-
-    my $req  = HTTP::Request->new( GET => $url );
-    my $resp = $ua->request($req);
-    if ( $resp->is_success() ) {
-      $obj = $json->decode( $resp->decoded_content() );
-      open( my $fh, '>', "$self->{'cacheDir'}/$name.json" );
-      $fh->print( $resp->decoded_content() );
-      close($fh);
-    } else {
-      quick( error => $resp->status_line() );
-    }
+  my ($name) = $AUTOLOAD =~ /::(.+)$/;
+  $name = lc($name);
+  my %check = map{lc($_) => undef} @{$self->content()};
+  if( !exists($check{$name}) ){
+    die("Cannot locate object method '$name' via package ".__PACKAGE__);
   }
 
-  return $obj;
+  my $endpoint = $name;
+  $endpoint .= "/$id" if( defined($id) );
+
+  $cacheName = "$name.$id" unless( $cacheName );
+  return $self->_getApiData($endpoint => $cacheName);
 }
 
+sub character{
+  my ($self, $id, $cacheName) = @_;
 
-1; # Magic true value required at end of module
+  my $name = 'character';
+  my $endpoint = $name;
+  $endpoint .= "/$id?extended=1&data=cj" if( defined($id) );
+
+  $cacheName = "$name.$id" unless( $cacheName );
+  return $self->_getApiData($endpoint);
+}
+
+sub content{
+  my ($self) = @_;
+
+  if( !exists($self->{'indexes'}) ){
+    my $obj = $self->getApiData("$self->{'host'}/content" => 'content');
+    $self->{'indexes'} = $obj;
+  }
+
+  return $self->{'indexes'};
+}
+
+sub esQuery {
+  my ( $self, $index, $query, $cacheName ) = @_;
+
+    $cacheName = undef unless( $self->{'cache'} );
+
+    my $retval = undef;
+    if( defined($cacheName) && -f "$self->{'cacheDir'}/$cacheName.json" ) {
+        open( my $fh, '<', "$self->{'cacheDir'}/$cacheName.json" );
+        local $/ = undef;
+        $retval = $self->{'_json'}->decode(<$fh>);
+        close($fh);
+    } else {
+        $retval = $self->_query( $index, $query );
+        open( my $fh, '>', "$self->{'cacheDir'}/$cacheName.json" );
+        $fh->print( $self->{'_json'}->encode($retval) );
+        close($fh);
+    }
+    return $retval;
+}
+
+sub _query {
+    my ( $self, $index, $query ) = @_;
+
+    my @terms;
+    foreach my $field ( keys %{$query} ) {
+        foreach my $item ( @{ $query->{$field} } ) {
+            push( @terms, qq/{"wildcard":{"$field":"$item"}}/ );
+        }
+    }
+
+    my $esQuery = qq/{
+  "indexes": "recipe",
+  "columns": "ID,Name,Icon",
+  "body": {
+    "query": {
+      "bool": {
+        "should": [
+/;
+    $esQuery .= join( ",\n", @terms );
+
+    $esQuery .= qq/
+        ]
+      }
+    },
+    "from": 0,
+    "size": 100
+  }
+}/;
+
+    my $req = HTTP::Request->new( POST => "$self->{'host'}/search" );
+    $req->content($esQuery);
+
+    my $retval = {};
+    my $resp   = $self->{_ua}->request($req);
+    if( $resp->is_success() ) {
+        $retval = $self->{'_json'}->decode( $resp->decoded_content() );
+    } else {
+        quick( error => $resp->status_line() );
+    }
+    return $retval;
+}
+
+sub getApiData {
+    my ( $self, $url, $cacheName ) = @_;
+
+    $cacheName = undef unless( $self->{'cache'} );
+
+    my $obj = undef;
+    if( defined($cacheName) && -f "$self->{'cacheDir'}/$cacheName.json" ) {
+        open( my $fh, '<', "$self->{'cacheDir'}/$cacheName.json" );
+        local $/ = undef;
+        $obj = $self->{'_json'}->decode(<$fh>);
+        close($fh);
+    } else {
+        my $req = HTTP::Request->new( GET => $url );
+        my $resp = $self->{_ua}->request($req);
+        if( $resp->is_success() ) {
+            $obj = $self->{'_json'}->decode( $resp->decoded_content() );
+            if( defined($cacheName) ){
+            open( my $fh, '>', "$self->{'cacheDir'}/$cacheName.json" );
+            $fh->print( $resp->decoded_content() );
+            close($fh);
+            }
+        } else {
+            quick( error => $resp->status_line() );
+        }
+    }
+
+    return $obj;
+}
+
+sub _getApiData {
+    my ( $self, $endpoint, $cacheName ) = @_;
+
+    $cacheName = undef unless( $self->{'cache'} );
+
+    my $obj = undef;
+    if( defined($cacheName) && -f "$self->{'cacheDir'}/$cacheName.json" ) {
+        open( my $fh, '<', "$self->{'cacheDir'}/$cacheName.json" );
+        local $/ = undef;
+        $obj = $self->{'_json'}->decode(<$fh>);
+        close($fh);
+    } else {
+    quick("$self->{'host'}/$endpoint") if( $self->{'verbose'} );
+        my $req = HTTP::Request->new( GET => "$self->{'host'}/$endpoint" );
+        my $resp = $self->{_ua}->request($req);
+        if( $resp->is_success() ) {
+            $obj = $self->{'_json'}->decode( $resp->decoded_content() );
+            if( defined($cacheName) ){
+            open( my $fh, '>', "$self->{'cacheDir'}/$cacheName.json" );
+            $fh->print( $resp->decoded_content() );
+            close($fh);
+            }
+        } else {
+            quick( error => $resp->status_line() );
+        }
+    }
+
+    return $obj;
+}
+
+sub search{
+  my ($self, $filters, $cacheName) = @_;
+
+    $cacheName = undef unless( $self->{'cache'} );
+
+  my $filter = join(',', (map{ url_encode($_) } @{$filters}));
+  $filter =~ s/\+//g;
+
+  my @retval;
+  my $nextPage = 1;
+  while( defined($nextPage) ){
+  my $obj = $self->_getApiData("search?filters=$filter&page=$nextPage");
+  printObject($obj);
+    push(@retval, @{$obj->{'Results'}});
+    $nextPage=$obj->{'Pagination'}{'PageNext'};
+  }
+
+  return wantarray ? @retval : \@retval;
+}
+
+1;    # Magic true value required at end of module
 
 __END__
 
