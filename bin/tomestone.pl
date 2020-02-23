@@ -68,13 +68,13 @@ my %config = (
     },
 
     'PLD' =>
-        { stats => ['Tenacity'], shops => [ 1769971, 1769974, 1770051 ] },
+        { stats => ['Vitality','Tenacity'], shops => [ 1769971, 1769974, 1770051 ] },
     'WAR' =>
-        { stats => ['Tenacity'], shops => [ 1769971, 1769974, 1770051 ] },
+        { stats => ['Vitality','Tenacity'], shops => [ 1769971, 1769974, 1770051 ] },
     'DRK' =>
-        { stats => ['Tenacity'], shops => [ 1769971, 1769974, 1770051 ] },
+        { stats => ['Vitality','Tenacity'], shops => [ 1769971, 1769974, 1770051 ] },
     'GNB' =>
-        { stats => ['Tenacity'], shops => [ 1769971, 1769974, 1770051 ] },
+        { stats => ['Vitality','Tenacity'], shops => [ 1769971, 1769974, 1770051 ] },
 
     'MIN' => { stats => ['Gathering'], shops => [1769991] },
     'LTW' => { stats => [ 'Craftsmanship', 'Control' ], shops => [1769990] },
