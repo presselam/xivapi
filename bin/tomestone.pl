@@ -96,12 +96,13 @@ sub main {
                 if( $name eq 'ItemReceive' ) {
                     my $itemId = $obj->{$key}{'ID'};
                     if( defined($itemId) ) {
-                        $shop{$internalId}{$name} = $obj->{$key}{'Name'};
+                        $shop{$internalId}{$name} = "$obj->{$key}{'Name'} ($obj->{$key}{'LevelItem'})";
                         $shop{$internalId}{'ItemId'} = $itemId;
                         $shop{$internalId}{'ItemSlot'}
                             = $obj->{$key}{'EquipSlotCategoryTargetID'};
                         my $item = $xivapi->item($itemId);
                         $shop{$internalId}{'ItemStats'} = $item->{'Stats'};
+                        $shop{$internalId}{'ItemLevel'} = $item->{'ItemLevel'};
 
                         if( $item->{'ClassJobCategory'}{$job} == 1 ) {
                             $slotMap{ $obj->{$key}
@@ -120,7 +121,7 @@ sub main {
                 my $rarity  = $itemRef->{'Rarity'};
                 #            printObject($itemRef);
 
-                my @row = ( $key, $itemId, $itemRef->{'Name'} );
+                my @row = ( $key, "$itemRef->{'Name'} ($itemRef->{'LevelItem'})" );
 
                 my $item = $xivapi->item($itemId);
                 my $slot = $item->{'EquipSlotCategoryTargetID'};
@@ -150,6 +151,7 @@ sub main {
 
                 push( @row, $useValue, $delta, $rate );
 
+#printObject($piece);
                 push( @row, $piece->{'ItemReceive'}, $piece->{'CountCost'} );
                 #            foreach my $stat ( @{ $config{$job}{stats} } ) {
                 my $value = $piece->{'ItemStats'}{$useStat}{'NQ'};
@@ -161,27 +163,27 @@ sub main {
 
             message( $obj->{'Name'} );
             @table = sort {
-                return 1                   if( $a->[5] <= 0 && $b->[5] > 0 );
-                return -1                  if( $b->[5] <= 0 && $a->[5] > 0 );
-                return $b->[5] <=> $a->[5] if( $a->[5] <= 0 && $b->[5] <= 0 );
-                $a->[5] <=> $b->[5];
+                return 1                   if( $a->[4] <= 0 && $b->[4] > 0 );
+                return -1                  if( $b->[4] <= 0 && $a->[4] > 0 );
+                return $b->[4] <=> $a->[4] if( $a->[4] <= 0 && $b->[4] <= 0 );
+                $a->[4] <=> $b->[4];
             } @table;
 
             my $need = 0;
             my $cost = 0;
             foreach my $row (@table) {
-                if( $row->[5] <= 0 ) {
+                if( $row->[4] <= 0 ) {
                     $_ = green($_) foreach @{$row};
                 } else {
                     $need++;
-                    $cost += $row->[7];
+                    $cost += $row->[6];
                 }
             }
 
             if( $need > 0 ) {
                 dump_table(
                     table => [
-                        [   qw( slot id name current delta rate item cost value )
+                        [   qw( slot name current delta rate item cost value )
                         ],
                         @table
                     ]
