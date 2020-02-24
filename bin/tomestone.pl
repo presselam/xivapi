@@ -75,8 +75,8 @@ sub main {
     foreach my $shopLevel ( sort keys %{ $conf->{'shops'} } ) {
         next unless( $lvl > $lower && $lvl <= $shopLevel );
 
-        foreach my $shop ( @{ $conf->{'shops'}{$shopLevel} } ) {
-            $obj = $xivapi->specialshop($shop);
+        foreach my $shopId ( @{ $conf->{'shops'}{$shopLevel} } ) {
+            $obj = $xivapi->specialshop($shopId);
 
             my %shop;
             my %slotMap;
@@ -96,18 +96,36 @@ sub main {
                 if( $name eq 'ItemReceive' ) {
                     my $itemId = $obj->{$key}{'ID'};
                     if( defined($itemId) ) {
-                        $shop{$internalId}{$name} = "$obj->{$key}{'Name'} ($obj->{$key}{'LevelItem'})";
+                        $shop{$internalId}{$name}
+                            = "$obj->{$key}{'Name'} ($obj->{$key}{'LevelItem'})";
                         $shop{$internalId}{'ItemId'} = $itemId;
                         $shop{$internalId}{'ItemSlot'}
                             = $obj->{$key}{'EquipSlotCategoryTargetID'};
                         my $item = $xivapi->item($itemId);
                         $shop{$internalId}{'ItemStats'} = $item->{'Stats'};
-                        $shop{$internalId}{'ItemLevel'} = $item->{'ItemLevel'};
+                        $shop{$internalId}{'ItemLevel'}
+                            = $item->{'ItemLevel'};
 
                         if( $item->{'ClassJobCategory'}{$job} == 1 ) {
-                            $slotMap{ $obj->{$key}
-                                    {'EquipSlotCategoryTargetID'} }
-                                = $internalId;
+                            my $slotkey
+                                = $obj->{$key}{'EquipSlotCategoryTargetID'};
+
+                            if( exists( $slotMap{$slotkey} ) ) {
+                                my $tmp = $slotMap{$slotkey};
+                                my $current
+                                    = $xivapi->item( $shop{$tmp}{'ItemId'} );
+                                foreach my $stat ( @{ $config{$job}{'stats'} } ) {
+                                    my $curVal
+                                        = $current->{'Stats'}{$stat}{'NQ'} || 0;
+                                    my $newVal = $item->{'Stats'}{$stat}{'NQ'} || 0;
+
+                                    if( $newVal > $curVal ) {
+                                        $slotMap{$slotkey} = $internalId;
+                                    }
+                                }
+                            } else {
+                                $slotMap{$slotkey} = $internalId;
+                            }
                         }
                     }
                 }
@@ -121,7 +139,8 @@ sub main {
                 my $rarity  = $itemRef->{'Rarity'};
                 #            printObject($itemRef);
 
-                my @row = ( $key, "$itemRef->{'Name'} ($itemRef->{'LevelItem'})" );
+                my @row = ( $key,
+                    "$itemRef->{'Name'} ($itemRef->{'LevelItem'})" );
 
                 my $item = $xivapi->item($itemId);
                 my $slot = $item->{'EquipSlotCategoryTargetID'};
@@ -151,7 +170,7 @@ sub main {
 
                 push( @row, $useValue, $delta, $rate );
 
-#printObject($piece);
+                #printObject($piece);
                 push( @row, $piece->{'ItemReceive'}, $piece->{'CountCost'} );
                 #            foreach my $stat ( @{ $config{$job}{stats} } ) {
                 my $value = $piece->{'ItemStats'}{$useStat}{'NQ'};
