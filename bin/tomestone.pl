@@ -72,8 +72,9 @@ sub main {
 
     my $conf  = $config{$job};
     my $lower = 1;
+    my $floor = int($lvl/10)*10;
     foreach my $shopLevel ( sort keys %{ $conf->{'shops'} } ) {
-        next unless( $lvl > $lower && $lvl <= $shopLevel );
+        next unless(( $lvl > $lower && $lvl <= $shopLevel ) || ( $floor > $lower && $floor <= $shopLevel ));
 
         foreach my $shopId ( @{ $conf->{'shops'}{$shopLevel} } ) {
             $obj = $xivapi->specialshop($shopId);
@@ -180,7 +181,7 @@ sub main {
                 push( @table, \@row );
             }
 
-            message( $obj->{'Name'} );
+            message( $shopLevel . ' -- ' . $obj->{'Name'} );
             @table = sort {
                 return 1                   if( $a->[4] <= 0 && $b->[4] > 0 );
                 return -1                  if( $b->[4] <= 0 && $a->[4] > 0 );
