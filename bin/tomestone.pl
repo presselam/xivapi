@@ -7,8 +7,8 @@ use autodie;
 use Cwd qw( abs_path );
 use File::Basename;
 use Getopt::Long;
-use JSON;
 use LWP;
+use JSON;
 
 use Toolkit;
 
@@ -35,51 +35,8 @@ if( !GetOptions(
     die("Invalid incantation\n");
 }
 
-my %config = (
-    'RDM' =>
-        { stats => ['Intelligence'], shops => [ 1769972, 1769975, 1770052 ] },
-    'BLM' =>
-        { stats => ['Intelligence'], shops => [ 1769972, 1769975, 1770052 ] },
-    'SMN' =>
-        { stats => ['Intelligence'], shops => [ 1769972, 1769975, 1770052 ] },
-
-    'BRD' =>
-        { stats => ['Dexterity'], shops => [ 1769971, 1769974, 1770051 ] },
-    'MCH' =>
-        { stats => ['Dexterity'], shops => [ 1769971, 1769974, 1770051 ] },
-    'DNC' =>
-        { stats => ['Dexterity'], shops => [ 1769971, 1769974, 1770051 ] },
-
-    'MNK' => {
-        stats => [ 'Strength', 'Critical Hit' ],
-        shops => [ 1769971,    1769974, 1770051 ]
-    },
-    'DRG' => {
-        stats => [ 'Strength', 'Critical Hit' ],
-        shops => [ 1769971,    1769974, 1770051 ]
-    },
-    'NIN' => {
-        stats => [ 'Dexterity', 'Critical Hit' ],
-        shops => [ 1769971,     1769974, 1770051 ]
-    },
-    'SAM' => {
-        stats => [ 'Strength', 'Critical Hit' ],
-        shops => [ 1769971,    1769974, 1770051 ]
-    },
-
-    'PLD' =>
-        { stats => ['Tenacity'], shops => [ 1769971, 1769974, 1770051 ] },
-    'WAR' =>
-        { stats => ['Tenacity'], shops => [ 1769971, 1769974, 1770051 ] },
-    'DRK' =>
-        { stats => ['Tenacity'], shops => [ 1769971, 1769974, 1770051 ] },
-    'GNB' =>
-        { stats => ['Tenacity'], shops => [ 1769971, 1769974, 1770051 ] },
-
-    'MIN' => { stats => ['Gathering'], shops => [1769991] },
-    'LTW' => { stats => [ 'Craftsmanship', 'Control' ], shops => [1769990] },
-    'GSM' => { stats => [ 'Craftsmanship', 'Control' ], shops => [1769990] },
-);
+my $json = JSON->new->allow_nonref();
+my %config = %{$json->decode(join('', <DATA>))};
 
 main();
 exit(0);
@@ -141,12 +98,14 @@ sub main {
         my @table;
         foreach my $key ( keys %{$gear} ) {
             next if( $key eq 'SoulCrystal' );
+#            printObject($gear->{$key});
             my $itemRef = $gear->{$key}{'Item'};
             my $itemId  = $itemRef->{'ID'};
+            my $ilvl = $itemRef->{'LevelItem'};
             my $rarity  = $itemRef->{'Rarity'};
             #            printObject($itemRef);
 
-            my @row = ( $key, $itemId, $itemRef->{'Name'} );
+            my @row = ( $key, $ilvl, $itemRef->{'Name'} );
 
             my $item = $xivapi->item($itemId);
             my $slot = $item->{'EquipSlotCategoryTargetID'};
@@ -167,7 +126,7 @@ sub main {
                 }
 
             }
-            my $target = $piece->{'ItemStats'}{$useStat}{'NQ'};
+            my $target = $piece->{'ItemStats'}{$useStat}{'NQ'} || 0;
             my $delta  = $target - $useValue;
             my $rate
                 = $delta != 0
@@ -207,7 +166,7 @@ sub main {
         if( $need > 0 ) {
             dump_table(
                 table => [
-                    [qw( slot id name current delta rate item cost value )],
+                    [qw( slot ilvl name current delta rate item cost value )],
                     @table
                 ]
             );
@@ -222,7 +181,7 @@ sub getCharacterSheet {
     my ( $api, $config ) = @_;
 
     my $retval = undef;
-    my $job    = uc( $opts{'job'} );
+    my $job    = exists($opts{'job'}) ? uc( $opts{'job'} ) : undef;
     if($job) {
         $retval = $api->cached("character.$opts{'lodestone'}.$job");
         if($retval) {
@@ -241,90 +200,5 @@ sub getCharacterSheet {
     return $retval;
 }
 
-__END__
-
-=head1 NAME
-
-quick.pl - [description here]
-
-=head1 VERSION
-
-This documentation refers to quick.pl version 0.0.1
-
-=head1 USAGE
-
-    quick.pl [options]
-
-=head1 REQUIRED ARGUMENTS
-
-=over
-
-None
-
-=back
-
-=head1 OPTIONS
-
-=over
-
-None
-
-=back
-
-=head1 DIAGNOSTICS
-
-None.
-
-=head1 CONFIGURATION AND ENVIRONMENT
-
-Requires no configuration files or environment variables.
-
-
-=head1 DEPENDENCIES
-
-None.
-
-
-=head1 BUGS
-
-None reported.
-Bug reports and other feedback are most welcome.
-
-
-=head1 AUTHOR
-
-Andrew Pressel C<< apressel@nextgenfed.com >>
-
-
-=head1 COPYRIGHT
-
-Copyright (c) 2019, Andrew Pressel C<< <apressel@nextgenfed.com> >>. All rights reserved.
-
-This module is free software. It may be used, redistributed
-and/or modified under the terms of the Perl Artistic License
-(see http://www.perl.com/perl/misc/Artistic.html)
-
-
-=head1 DISCLAIMER OF WARRANTY
-
-BECAUSE THIS SOFTWARE IS LICENSED FREE OF CHARGE, THERE IS NO WARRANTY
-FOR THE SOFTWARE, TO THE EXTENT PERMITTED BY APPLICABLE LAW. EXCEPT WHEN
-OTHERWISE STATED IN WRITING THE COPYRIGHT HOLDERS AND/OR OTHER PARTIES
-PROVIDE THE SOFTWARE "AS IS" WITHOUT WARRANTY OF ANY KIND, EITHER
-EXPRESSED OR IMPLIED, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE. THE
-ENTIRE RISK AS TO THE QUALITY AND PERFORMANCE OF THE SOFTWARE IS WITH
-YOU. SHOULD THE SOFTWARE PROVE DEFECTIVE, YOU ASSUME THE COST OF ALL
-NECESSARY SERVICING, REPAIR, OR CORRECTION.
-
-IN NO EVENT UNLESS REQUIRED BY APPLICABLE LAW OR AGREED TO IN WRITING
-WILL ANY COPYRIGHT HOLDER, OR ANY OTHER PARTY WHO MAY MODIFY AND/OR
-REDISTRIBUTE THE SOFTWARE AS PERMITTED BY THE ABOVE LICENCE, BE
-LIABLE TO YOU FOR DAMAGES, INCLUDING ANY GENERAL, SPECIAL, INCIDENTAL,
-OR CONSEQUENTIAL DAMAGES ARISING OUT OF THE USE OR INABILITY TO USE
-THE SOFTWARE (INCLUDING BUT NOT LIMITED TO LOSS OF DATA OR DATA BEING
-RENDERED INACCURATE OR LOSSES SUSTAINED BY YOU OR THIRD PARTIES OR A
-FAILURE OF THE SOFTWARE TO OPERATE WITH ANY OTHER SOFTWARE), EVEN IF
-SUCH HOLDER OR OTHER PARTY HAS BEEN ADVISED OF THE POSSIBILITY OF
-SUCH DAMAGES.
-
+__DATA__
+{"DRK":{"stats":["Tenacity"],"shops":[1769533,1769649,1769732,1769850,1769907,1770051,1770319,1770434,1770437]},"AST":{"shops":[1769534,1769651,1769733,1769851,1769908,1770052,1770320,1770435,1770438],"stats":["Piety"]},"PLD":{"stats":["Tenacity"],"shops":[1769533,1769649,1769732,1769850,1769907,1770051,1770319,1770434,1770437]},"WHM":{"stats":["Piety"],"shops":[1769534,1769651,1769733,1769851,1769908,1770052,1770320,1770435,1770438]},"MCH":{"stats":["Dexterity"],"shops":[1769533,1769649,1769732,1769850,1769907,1770051,1770319,1770434,1770437]},"SMN":{"shops":[1769534,1769651,1769733,1769851,1769908,1770052,1770320,1770435,1770438],"stats":["Intelligence"]},"GNB":{"stats":["Tenacity"],"shops":[1769533,1769649,1769732,1769850,1769907,1770051,1770319,1770434,1770437]},"DRG":{"shops":[1769533,1769649,1769732,1769850,1769907,1770051,1770319,1770434,1770437],"stats":["Strength","Critical Hit"]},"SGE":{"shops":[1769534,1769651,1769733,1769851,1769908,1770052,1770320,1770435,1770438],"stats":["Piety"]},"BLM":{"shops":[1769534,1769651,1769733,1769851,1769908,1770052,1770320,1770435,1770438],"stats":["Intelligence"]},"MNK":{"stats":["Strength","Critical Hit"],"shops":[1769533,1769649,1769732,1769850,1769907,1770051,1770319,1770434,1770437]},"DNC":{"stats":["Dexterity"],"shops":[1769533,1769649,1769732,1769850,1769907,1770051,1770319,1770434,1770437]},"RDM":{"stats":["Intelligence"],"shops":[1769534,1769651,1769733,1769851,1769908,1770052,1770320,1770435,1770438]},"WAR":{"shops":[1769533,1769649,1769732,1769850,1769907,1770051,1770319,1770434,1770437],"stats":["Tenacity"]},"BRD":{"stats":["Dexterity"],"shops":[1769533,1769649,1769732,1769850,1769907,1770051,1770319,1770434,1770437]},"SAM":{"stats":["Strength","Critical Hit"],"shops":[1769533,1769649,1769732,1769850,1769907,1770051,1770319,1770434,1770437]},"SCH":{"shops":[1769534,1769651,1769733,1769851,1769908,1770052,1770320,1770435,1770438],"stats":["Piety"]},"NIN":{"stats":["Strength","Critical Hit"],"shops":[1769533,1769649,1769732,1769850,1769907,1770051,1770319,1770434,1770437]}}
